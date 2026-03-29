@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SwiftDrop — Fast Delivery</title>
+  <link rel="stylesheet" href="styles.css" />
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <!-- Iconify -->
+  <script src="https://code.iconify.design/iconify-icon/1.0.7/iconify-icon.min.js"></script>
+  <style>
+    /* Customer page extras */
+    .customer-layout {
+      display: grid;
+      grid-template-columns: 380px 1fr;
+      min-height: calc(100vh - 64px);
+    }
+    .order-panel {
+      background: var(--navy-mid);
+      border-right: 1px solid var(--navy-border);
+      overflow-y: auto;
+      height: calc(100vh - 64px);
+      position: sticky;
+      top: 64px;
+      display: flex;
+      flex-direction: column;
+    }
+    .map-panel {
+      display: flex;
+      flex-direction: column;
+      height: calc(100vh - 64px);
+    }
+    #customer-map { flex: 1; height: 100%; }
+    .panel-body { padding: 1.25rem; flex: 1; }
+    .panel-footer { padding: 1rem 1.25rem; border-top: 1px solid var(--navy-border); }
+    .orders-list { display: flex; flex-direction: column; gap: 0.625rem; }
+    .no-orders-hero { 
+      display: flex; flex-direction: column; align-items: center; 
+      justify-content: center; padding: 2.5rem 1rem; text-align: center; flex: 1;
+    }
+    .no-orders-icon { font-size: 3rem; margin-bottom: 1rem; opacity: 0.4; }
+    .price-row { display: flex; justify-content: space-between; font-size: 0.875rem; color: var(--text-secondary); padding: 0.25rem 0; }
+    .price-row.total { color: var(--text-primary); font-weight: 700; font-size: 1rem; border-top: 1px solid var(--navy-border); margin-top: 0.5rem; padding-top: 0.75rem; }
+    .pkg-options { display: grid; grid-template-columns: repeat(3,1fr); gap: 0.5rem; }
+    .pkg-option { border: 1px solid var(--navy-border); border-radius: var(--radius-sm); padding: 0.625rem 0.5rem; text-align: center; cursor: pointer; transition: all var(--transition); }
+    .pkg-option:hover, .pkg-option.selected { border-color: var(--amber); background: rgba(245,158,11,0.08); }
+    .pkg-option.selected { color: var(--amber); }
+    .pkg-icon { font-size: 1.3rem; display: block; margin-bottom: 0.25rem; }
+    .pkg-label { font-size: 0.7rem; font-weight: 600; font-family: var(--font-mono); text-transform: uppercase; }
+    .map-overlay-info {
+      position: absolute; top: 1rem; right: 1rem; z-index: 999;
+      background: var(--navy-mid); border: 1px solid var(--navy-border);
+      border-radius: var(--radius); padding: 0.75rem 1rem;
+      display: flex; flex-direction: column; gap: 0.4rem;
+      box-shadow: var(--shadow-card); min-width: 160px;
+    }
+    .map-info-row { display: flex; align-items: center; gap: 0.5rem; font-size: 0.78rem; color: var(--text-secondary); }
+    .map-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .order-selected-overlay {
+      background: var(--card-bg); border-top: 1px solid var(--navy-border); padding: 1rem 1.25rem;
+    }
+    #user-avatar {
+      width: 32px; height: 32px; border-radius: 50%;
+      background: linear-gradient(135deg, var(--amber), var(--teal));
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.8rem; font-weight: 700; color: #000; cursor: pointer;
+    }
+    .view-toggle { display: flex; gap: 0.5rem; padding: 1rem 1.25rem; border-bottom: 1px solid var(--navy-border); }
+    @media (max-width: 900px) {
+      .customer-layout { grid-template-columns: 1fr; }
+      .order-panel { height: auto; position: relative; top: 0; }
+      #customer-map { height: 350px; }
+    }
+  </style>
+</head>
+<body>
+  <!-- NAV -->
+  <nav class="nav">
+    <a href="index.html" class="nav-brand">
+      <span class="brand-dot"></span> SwiftDrop
+    </a>
+    <ul class="nav-links">
+      <li><a href="index.html" class="active">Customer</a></li>
+      <li><a href="rider.html">Rider App</a></li>
+      <li><a href="dashboard.html">Admin</a></li>
+    </ul>
+    <div class="nav-right">
+      <button class="theme-toggle" id="theme-btn" title="Toggle theme">🌙</button>
+      <div id="user-avatar" onclick="openAuthModal('login')" title="Login"></div>
+      <button class="btn btn-primary btn-sm" id="nav-cta" onclick="openAuthModal('login')">Sign In</button>
+    </div>
+  </nav>
+
+  <!-- Hero (shown when not logged in) -->
+  <div id="hero-section" class="hero" style="display:none;">
+    <p class="hero-eyebrow">⚡ Real-Time Package Delivery</p>
+    <h1 class="hero-title">Order anything.<br>Track everything.</h1>
+    <p class="hero-sub">SwiftDrop connects you with nearby riders to deliver your packages fast, safe, and reliably.</p>
+    <div style="display:flex;gap:0.75rem;justify-content:center;flex-wrap:wrap;">
+      <button class="btn btn-primary btn-lg" onclick="openAuthModal('register')">Get Started Free</button>
+      <button class="btn btn-ghost btn-lg" onclick="openAuthModal('login')">Sign In</button>
+    </div>
+  </div>
+
+  <!-- MAIN APP LAYOUT -->
+  <div class="customer-layout" id="app-section">
+    <!-- Left Panel -->
+    <div class="order-panel">
+      <div class="view-toggle">
+        <button class="tab-btn active" onclick="switchView('new', this)">New Order</button>
+        <button class="tab-btn" onclick="switchView('orders', this)">My Orders</button>
+      </div>
+
+      <!-- New Order Form -->
+      <div id="view-new" class="panel-body fade-in">
+        <h2 style="font-size:1.1rem;margin-bottom:1.25rem;">Place a Delivery</h2>
+
+        <div class="form-group">
+          <label class="form-label">Pickup Location</label>
+          <div class="input-group">
+            <iconify-icon icon="mdi:map-marker" class="input-icon" style="color:var(--amber)"></iconify-icon>
+            <input type="text" id="pickup-input" class="form-input" placeholder="Enter pickup address" oninput="geocodeLive('pickup', this.value)" />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Delivery Destination</label>
+          <div class="input-group">
+            <iconify-icon icon="mdi:map-marker-check" class="input-icon" style="color:var(--teal)"></iconify-icon>
+            <input type="text" id="dest-input" class="form-input" placeholder="Enter destination address" oninput="geocodeLive('dest', this.value)" />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Package Type</label>
+          <div class="pkg-options" id="pkg-options">
+            <div class="pkg-option selected" onclick="selectPkg(this,'Document')">
+              <span class="pkg-icon">📄</span>
+              <span class="pkg-label">Document</span>
+            </div>
+            <div class="pkg-option" onclick="selectPkg(this,'Small Box')">
+              <span class="pkg-icon">📦</span>
+              <span class="pkg-label">Small Box</span>
+            </div>
+            <div class="pkg-option" onclick="selectPkg(this,'Large Box')">
+              <span class="pkg-icon">🗃️</span>
+              <span class="pkg-label">Large Box</span>
+            </div>
+            <div class="pkg-option" onclick="selectPkg(this,'Fragile')">
+              <span class="pkg-icon">💎</span>
+              <span class="pkg-label">Fragile</span>
+            </div>
+            <div class="pkg-option" onclick="selectPkg(this,'Food')">
+              <span class="pkg-icon">🍱</span>
+              <span class="pkg-label">Food</span>
+            </div>
+            <div class="pkg-option" onclick="selectPkg(this,'Electronics')">
+              <span class="pkg-icon">💻</span>
+              <span class="pkg-label">Electronics</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Package Weight</label>
+          <select id="weight-select" class="form-select">
+            <option value="0.5">Under 1 kg</option>
+            <option value="2" selected>1–5 kg</option>
+            <option value="7">5–10 kg</option>
+            <option value="15">10–20 kg</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Notes for Rider</label>
+          <textarea id="order-notes" class="form-textarea" placeholder="E.g. Call when arrived, leave at reception..."></textarea>
+        </div>
+
+        <!-- Price Summary -->
+        <div class="card card-sm" id="price-card" style="margin-bottom:1.25rem;">
+          <div class="price-row"><span>Base fare</span><span id="price-base">₵ 8.00</span></div>
+          <div class="price-row"><span>Distance fee</span><span id="price-dist">₵ 0.00</span></div>
+          <div class="price-row"><span>Package surcharge</span><span id="price-pkg">₵ 0.00</span></div>
+          <div class="price-row total"><span>Total</span><span id="price-total">₵ 8.00</span></div>
+        </div>
+
+        <button class="btn btn-primary btn-full btn-lg" onclick="placeOrder()">
+          <iconify-icon icon="mdi:rocket-launch"></iconify-icon> Place Order
+        </button>
+      </div>
+
+      <!-- My Orders List -->
+      <div id="view-orders" class="panel-body fade-in" style="display:none;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem;">
+          <h2 style="font-size:1.1rem;">My Orders</h2>
+          <div class="live-dot">Live</div>
+        </div>
+        <div id="orders-list" class="orders-list"></div>
+      </div>
+    </div>
+
+    <!-- Map Panel -->
+    <div class="map-panel" style="position:relative;">
+      <div id="customer-map"></div>
+      <div class="map-overlay-info">
+        <div style="font-size:0.7rem;font-family:var(--font-mono);color:var(--text-muted);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:0.25rem;">Map Legend</div>
+        <div class="map-info-row"><div class="map-dot" style="background:var(--amber)"></div>Pickup</div>
+        <div class="map-info-row"><div class="map-dot" style="background:var(--teal)"></div>Destination</div>
+        <div class="map-info-row"><div class="map-dot" style="background:var(--green)"></div>Rider</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- AUTH MODAL -->
+  <div class="modal-overlay" id="auth-modal">
+    <div class="modal">
+      <button class="modal-close" onclick="closeAuthModal()">✕</button>
+      <div id="auth-content">
+        <!-- Filled by JS -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Order Detail Modal -->
+  <div class="modal-overlay hidden" id="order-modal">
+    <div class="modal" style="max-width:520px;">
+      <button class="modal-close" onclick="document.getElementById('order-modal').classList.add('hidden')">✕</button>
+      <div id="order-modal-content"></div>
+    </div>
+  </div>
+
+  <!-- Toast Container -->
+  <div id="toast-container"></div>
+
+  <!-- Scripts -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="app.js"></script>
+  <script>
+    // Init on load
+    window.addEventListener('DOMContentLoaded', () => {
+      initTheme();
+      initCustomerApp();
+      // Show auth modal if not logged in
+      if (!getCurrentUser()) {
+        document.getElementById('hero-section').style.display = 'block';
+        openAuthModal('login');
+      }
+    });
+  </script>
+</body>
+</html>

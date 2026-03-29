@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SwiftDrop — Admin Dashboard</title>
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://code.iconify.design/iconify-icon/1.0.7/iconify-icon.min.js"></script>
+  <style>
+    .dash-layout {
+      display: grid;
+      grid-template-columns: 240px 1fr;
+      min-height: calc(100vh - 64px);
+    }
+    /* Sidebar */
+    .dash-sidebar {
+      background: var(--navy-mid);
+      border-right: 1px solid var(--navy-border);
+      height: calc(100vh - 64px);
+      position: sticky;
+      top: 64px;
+      overflow-y: auto;
+      padding: 1.25rem 0;
+    }
+    .dash-nav-section {
+      margin-bottom: 1.5rem;
+    }
+    .dash-nav-label {
+      font-size: 0.65rem;
+      font-family: var(--font-mono);
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--text-muted);
+      padding: 0 1.25rem;
+      margin-bottom: 0.5rem;
+    }
+    .dash-nav-item {
+      display: flex;
+      align-items: center;
+      gap: 0.65rem;
+      padding: 0.65rem 1.25rem;
+      color: var(--text-secondary);
+      text-decoration: none;
+      font-size: 0.875rem;
+      font-weight: 500;
+      cursor: pointer;
+      border: none;
+      background: transparent;
+      width: 100%;
+      text-align: left;
+      transition: all var(--transition);
+      position: relative;
+    }
+    .dash-nav-item:hover { color: var(--text-primary); background: var(--glass); }
+    .dash-nav-item.active { color: var(--amber); background: rgba(245,158,11,0.08); }
+    .dash-nav-item.active::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 3px;
+      background: var(--amber);
+      border-radius: 0 3px 3px 0;
+    }
+    .dash-nav-badge {
+      margin-left: auto;
+      background: rgba(239,68,68,0.15);
+      color: var(--red);
+      font-size: 0.68rem;
+      font-weight: 700;
+      padding: 0.1rem 0.45rem;
+      border-radius: 100px;
+      font-family: var(--font-mono);
+    }
+
+    /* Main area */
+    .dash-main {
+      overflow-y: auto;
+      height: calc(100vh - 64px);
+    }
+    .dash-page { padding: 1.75rem 2rem; }
+
+    /* Stats row */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    /* Map section */
+    #admin-map { height: 380px; border-radius: var(--radius-lg); border: 1px solid var(--navy-border); }
+
+    /* Filters bar */
+    .filters-bar {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+      margin-bottom: 1.25rem;
+    }
+    .filter-select {
+      background: var(--input-bg);
+      border: 1px solid var(--navy-border);
+      border-radius: var(--radius-sm);
+      padding: 0.4rem 0.8rem;
+      color: var(--text-secondary);
+      font-family: var(--font-body);
+      font-size: 0.8rem;
+      outline: none;
+      cursor: pointer;
+      transition: all var(--transition);
+    }
+    .filter-select:focus { border-color: var(--amber); color: var(--text-primary); }
+    .search-filter {
+      background: var(--input-bg);
+      border: 1px solid var(--navy-border);
+      border-radius: var(--radius-sm);
+      padding: 0.4rem 0.8rem 0.4rem 2.25rem;
+      color: var(--text-primary);
+      font-family: var(--font-body);
+      font-size: 0.8rem;
+      outline: none;
+      transition: all var(--transition);
+      width: 200px;
+    }
+    .search-filter:focus { border-color: var(--amber); width: 260px; }
+    .filter-wrap { position: relative; }
+    .filter-wrap .search-icon { position: absolute; left: 0.65rem; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 0.85rem; }
+
+    /* Chart */
+    .mini-chart {
+      display: flex;
+      align-items: flex-end;
+      gap: 3px;
+      height: 40px;
+    }
+    .chart-bar {
+      flex: 1;
+      background: rgba(245,158,11,0.3);
+      border-radius: 2px;
+      transition: all var(--transition);
+    }
+    .chart-bar:hover { background: var(--amber); }
+
+    /* Rider status card */
+    .rider-status-card {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.75rem;
+      background: var(--glass);
+      border: 1px solid var(--glass-border);
+      border-radius: var(--radius);
+      transition: all var(--transition);
+    }
+    .rider-status-card:hover { border-color: var(--navy-border); background: var(--card-bg); }
+    .rider-status-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .rider-info { flex: 1; }
+    .rider-name { font-size: 0.875rem; font-weight: 600; color: var(--text-primary); }
+    .rider-sub { font-size: 0.75rem; color: var(--text-muted); font-family: var(--font-mono); }
+
+    /* Two-col layout */
+    .dash-two-col { display: grid; grid-template-columns: 1fr 300px; gap: 1.25rem; }
+    .dash-three-col { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; }
+
+    /* Auto-refresh bar */
+    .auto-refresh {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+    }
+    .refresh-progress {
+      width: 60px;
+      height: 3px;
+      background: var(--navy-border);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    .refresh-fill {
+      height: 100%;
+      background: var(--amber);
+      width: 0%;
+      animation: refill 5s linear infinite;
+    }
+    @keyframes refill { from { width: 0%; } to { width: 100%; } }
+
+    /* Action buttons in table */
+    .table-actions { display: flex; gap: 0.35rem; }
+
+    @media (max-width: 1100px) {
+      .stats-grid { grid-template-columns: repeat(2, 1fr); }
+      .dash-two-col { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 860px) {
+      .dash-layout { grid-template-columns: 1fr; }
+      .dash-sidebar { display: none; }
+      .dash-page { padding: 1.25rem 1rem; }
+    }
+  </style>
+</head>
+<body>
+  <!-- NAV -->
+  <nav class="nav">
+    <a href="index.html" class="nav-brand">
+      <span class="brand-dot"></span> SwiftDrop
+    </a>
+    <ul class="nav-links">
+      <li><a href="index.html">Customer</a></li>
+      <li><a href="rider.html">Rider App</a></li>
+      <li><a href="dashboard.html" class="active">Admin</a></li>
+    </ul>
+    <div class="nav-right">
+      <div class="auto-refresh">
+        <div class="refresh-progress"><div class="refresh-fill"></div></div>
+        Live
+      </div>
+      <button class="theme-toggle" id="theme-btn" title="Toggle theme">🌙</button>
+      <div style="display:flex;align-items:center;gap:0.5rem;background:var(--glass);border:1px solid var(--glass-border);border-radius:var(--radius-sm);padding:0.35rem 0.75rem;">
+        <div style="width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,#8b5cf6,var(--amber));display:flex;align-items:center;justify-content:center;font-size:0.7rem;font-weight:700;">AD</div>
+        <span style="font-size:0.8rem;font-weight:600;">Admin</span>
+      </div>
+    </div>
+  </nav>
+
+  <div class="dash-layout">
+    <!-- Sidebar -->
+    <aside class="dash-sidebar">
+      <div class="dash-nav-section">
+        <div class="dash-nav-label">Overview</div>
+        <button class="dash-nav-item active" onclick="showDashPage('overview', this)">
+          <iconify-icon icon="mdi:view-dashboard"></iconify-icon> Dashboard
+        </button>
+        <button class="dash-nav-item" onclick="showDashPage('orders', this)">
+          <iconify-icon icon="mdi:package-variant"></iconify-icon> All Orders
+          <span class="dash-nav-badge" id="pending-badge">0</span>
+        </button>
+        <button class="dash-nav-item" onclick="showDashPage('map', this)">
+          <iconify-icon icon="mdi:map-marker-multiple"></iconify-icon> Live Map
+        </button>
+      </div>
+      <div class="dash-nav-section">
+        <div class="dash-nav-label">Management</div>
+        <button class="dash-nav-item" onclick="showDashPage('riders', this)">
+          <iconify-icon icon="mdi:motorbike"></iconify-icon> Riders
+        </button>
+        <button class="dash-nav-item" onclick="showDashPage('customers', this)">
+          <iconify-icon icon="mdi:account-group"></iconify-icon> Customers
+        </button>
+      </div>
+      <div class="dash-nav-section">
+        <div class="dash-nav-label">System</div>
+        <button class="dash-nav-item" onclick="showDashPage('settings', this)">
+          <iconify-icon icon="mdi:cog"></iconify-icon> Settings
+        </button>
+        <a href="index.html" class="dash-nav-item">
+          <iconify-icon icon="mdi:open-in-new"></iconify-icon> Customer App
+        </a>
+      </div>
+    </aside>
+
+    <!-- Main -->
+    <main class="dash-main">
+      <!-- OVERVIEW PAGE -->
+      <div id="page-overview" class="dash-page">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.5rem;">
+          <div>
+            <h1 style="font-size:1.4rem;">Control Center</h1>
+            <p style="font-size:0.8rem;color:var(--text-muted);font-family:var(--font-mono);">Real-time delivery monitoring</p>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="simulateNewOrder()">
+            <iconify-icon icon="mdi:plus"></iconify-icon> Simulate Order
+          </button>
+        </div>
+
+        <!-- Stats -->
+        <div class="stats-grid" id="stats-grid"></div>
+
+        <!-- Charts + Riders -->
+        <div class="dash-two-col" style="margin-bottom:1.25rem;">
+          <div class="card">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;">
+              <div>
+                <div class="stat-label">Orders This Week</div>
+                <div style="font-size:1.25rem;font-weight:700;font-family:var(--font-display);">Activity Chart</div>
+              </div>
+              <div class="live-dot">Updating</div>
+            </div>
+            <div class="mini-chart" id="activity-chart"></div>
+            <div style="display:flex;justify-content:space-between;margin-top:0.5rem;">
+              <span style="font-size:0.7rem;color:var(--text-muted);font-family:var(--font-mono);">Mon</span>
+              <span style="font-size:0.7rem;color:var(--text-muted);font-family:var(--font-mono);">Tue</span>
+              <span style="font-size:0.7rem;color:var(--text-muted);font-family:var(--font-mono);">Wed</span>
+              <span style="font-size:0.7rem;color:var(--text-muted);font-family:var(--font-mono);">Thu</span>
+              <span style="font-size:0.7rem;color:var(--text-muted);font-family:var(--font-mono);">Fri</span>
+              <span style="font-size:0.7rem;color:var(--text-muted);font-family:var(--font-mono);">Sat</span>
+              <span style="font-size:0.7rem;color:var(--text-muted);font-family:var(--font-mono);">Sun</span>
+            </div>
+          </div>
+          <div class="card">
+            <div class="stat-label" style="margin-bottom:0.75rem;">Active Riders</div>
+            <div id="riders-status-list" style="display:flex;flex-direction:column;gap:0.5rem;"></div>
+          </div>
+        </div>
+
+        <!-- Recent orders table -->
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem;">
+          <h3 style="font-size:1rem;font-weight:700;">Recent Orders</h3>
+          <button class="btn btn-ghost btn-sm" onclick="showDashPage('orders', null)">View All</button>
+        </div>
+        <div class="table-wrap">
+          <table id="recent-orders-table">
+            <thead>
+              <tr>
+                <th>Order ID</th>
+                <th>Customer</th>
+                <th>Rider</th>
+                <th>Status</th>
+                <th>Amount</th>
+                <th>Time</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="recent-orders-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ORDERS PAGE -->
+      <div id="page-orders" class="dash-page" style="display:none;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem;">
+          <div>
+            <h1 style="font-size:1.4rem;">All Orders</h1>
+            <p style="font-size:0.8rem;color:var(--text-muted);" id="orders-count-text">Loading...</p>
+          </div>
+        </div>
+        <div class="filters-bar">
+          <div class="filter-wrap">
+            <iconify-icon icon="mdi:magnify" class="search-icon"></iconify-icon>
+            <input type="text" class="search-filter" placeholder="Search orders..." oninput="filterOrders()" id="order-search" />
+          </div>
+          <select class="filter-select" id="filter-status" onchange="filterOrders()">
+            <option value="">All Status</option>
+            <option value="pending">Pending</option>
+            <option value="active">Active</option>
+            <option value="transit">In Transit</option>
+            <option value="delivered">Delivered</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
+          <select class="filter-select" id="filter-rider" onchange="filterOrders()">
+            <option value="">All Riders</option>
+          </select>
+          <select class="filter-select" id="filter-pkg" onchange="filterOrders()">
+            <option value="">All Types</option>
+            <option value="Document">Document</option>
+            <option value="Small Box">Small Box</option>
+            <option value="Large Box">Large Box</option>
+            <option value="Fragile">Fragile</option>
+            <option value="Food">Food</option>
+            <option value="Electronics">Electronics</option>
+          </select>
+          <button class="btn btn-ghost btn-sm" onclick="clearFilters()">
+            <iconify-icon icon="mdi:filter-remove"></iconify-icon> Clear
+          </button>
+        </div>
+        <div class="table-wrap">
+          <table id="all-orders-table">
+            <thead>
+              <tr>
+                <th>Order ID</th>
+                <th>Customer</th>
+                <th>Pickup</th>
+                <th>Destination</th>
+                <th>Rider</th>
+                <th>Type</th>
+                <th>Status</th>
+                <th>Amount</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="all-orders-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- MAP PAGE -->
+      <div id="page-map" class="dash-page" style="display:none;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;">
+          <h1 style="font-size:1.4rem;">Live Map</h1>
+          <div class="live-dot">Real-time positions</div>
+        </div>
+        <div style="height:calc(100vh - 200px);min-height:400px;">
+          <div id="admin-map" style="height:100%;"></div>
+        </div>
+      </div>
+
+      <!-- RIDERS PAGE -->
+      <div id="page-riders" class="dash-page" style="display:none;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem;">
+          <h1 style="font-size:1.4rem;">Rider Management</h1>
+        </div>
+        <div class="dash-three-col" id="riders-cards"></div>
+      </div>
+
+      <!-- CUSTOMERS PAGE -->
+      <div id="page-customers" class="dash-page" style="display:none;">
+        <div style="margin-bottom:1.25rem;">
+          <h1 style="font-size:1.4rem;">Customer Accounts</h1>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Phone</th>
+                <th>Orders</th>
+                <th>Total Spent</th>
+                <th>Joined</th>
+              </tr>
+            </thead>
+            <tbody id="customers-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- SETTINGS PAGE -->
+      <div id="page-settings" class="dash-page" style="display:none;">
+        <h1 style="font-size:1.4rem;margin-bottom:1.5rem;">System Settings</h1>
+        <div style="max-width:600px;display:flex;flex-direction:column;gap:1.25rem;">
+          <div class="card">
+            <h3 style="font-size:0.95rem;margin-bottom:1rem;font-family:var(--font-display);">General</h3>
+            <div class="form-group">
+              <label class="form-label">Platform Name</label>
+              <input type="text" class="form-input" value="SwiftDrop" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Base Delivery Fee (₵)</label>
+              <input type="number" class="form-input" value="8.00" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Per KM Rate (₵)</label>
+              <input type="number" class="form-input" value="1.50" />
+            </div>
+            <button class="btn btn-primary" onclick="showToast('Settings saved!','success')">Save Settings</button>
+          </div>
+          <div class="card">
+            <h3 style="font-size:0.95rem;margin-bottom:1rem;font-family:var(--font-display);">Appearance</h3>
+            <div class="form-group">
+              <label class="form-label">Theme</label>
+              <select class="form-select" onchange="setTheme(this.value)">
+                <option value="dark">Dark Mode</option>
+                <option value="light">Light Mode</option>
+              </select>
+            </div>
+          </div>
+          <div class="card">
+            <h3 style="font-size:0.95rem;margin-bottom:1rem;font-family:var(--font-display);">Simulation Controls</h3>
+            <p style="font-size:0.875rem;color:var(--text-secondary);margin-bottom:1rem;">Control the simulation speed for demo purposes.</p>
+            <div class="form-group">
+              <label class="form-label">Auto-update Interval (seconds): <span id="interval-val">5</span></label>
+              <input type="range" min="2" max="30" value="5" oninput="document.getElementById('interval-val').textContent=this.value" />
+            </div>
+            <button class="btn btn-success" onclick="showToast('Simulation running!','success')">Start Simulation</button>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Order Detail Modal -->
+  <div class="modal-overlay hidden" id="admin-order-modal">
+    <div class="modal" style="max-width:560px;">
+      <button class="modal-close" onclick="document.getElementById('admin-order-modal').classList.add('hidden')">✕</button>
+      <div id="admin-order-modal-content"></div>
+    </div>
+  </div>
+
+  <div id="toast-container"></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="app.js"></script>
+  <script src="dashboard.js"></script>
+  <script>
+    window.addEventListener('DOMContentLoaded', () => {
+      initTheme();
+      initDashboard();
+    });
+  </script>
+</body>
+</html>
